@@ -868,6 +868,23 @@
             width: 34px;
             height: 18px;
         }
+
+        /* Make the decorative slider NOT intercept clicks */
+        .toggle-switch .slider {
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* The actual clickable area is the input, which spans the full toggle */
+        .toggle-switch input {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            z-index: 1;
+            cursor: pointer;
+        }
     </style>
 </head>
 
@@ -1390,11 +1407,10 @@
                         <div class="form-group">
                             <div class="toggle-row">
                                 <label>Enabled</label>
-                                <div class="toggle-switch">
-                                    <input type="checkbox" id="subtitle_enabled"
-                                        form="tiramisu-form">
-                                    <span class="slider"></span>
-                                </div>
+                                <label class="switch"><input type="checkbox" id="subtitle_enabled"
+                                        form="tiramisu-form"
+                                        onchange="_toggleSubtitleSection(this.checked)"><span
+                                        class="slider"></span></label>
                             </div>
                             <div class="hint">Enable subtitle provider (SubDB + OpenSubtitles)</div>
                         </div>
