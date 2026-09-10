@@ -3996,6 +3996,7 @@ func main() {
 
 	globalConfig.Store(&cfg)
 	subprovider.SetAppVersion(AppVersion)
+	subprovider.SetLogger(logger)
 	prowlarrClient = prowlarr.NewClient(gc().Prowlarr)
 	telemetry.SendHeartbeat(*gc(), AppVersion)
 	logger.Printf("[DEBUG] BlockListURL loaded: '%s'", gc().BlockListURL)
