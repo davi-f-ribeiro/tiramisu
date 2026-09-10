@@ -5,6 +5,12 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
+
+# Copy go.mod and go.sum first for dependency caching
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy the rest of the source
 COPY . .
 
 # Use Docker's automatic TARGETARCH variable for multi-arch support
