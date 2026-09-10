@@ -3,6 +3,7 @@ package subprovider
 import (
 	"fmt"
 	"os"
+	"time"
 )
 
 // ---------- Config loading ----------
@@ -31,6 +32,8 @@ type EngineConfig struct {
 	OpenSubtitlesUser     string
 	OpenSubtitlesPass     string
 	MaxResultsPerProvider int
+	SubDBTimeout          time.Duration
+	OSDownloadTimeout     time.Duration
 }
 
 // LoadSubtitleConfig reads subtitle config from config.json and env vars.
@@ -78,5 +81,7 @@ func (sc SubtitleConfig) ToEngineConfig() EngineConfig {
 		OpenSubtitlesUser:     sc.User,
 		OpenSubtitlesPass:     sc.Password,
 		MaxResultsPerProvider: sc.MaxResults,
+		SubDBTimeout:          5 * time.Second,
+		OSDownloadTimeout:     15 * time.Second,
 	}
 }
