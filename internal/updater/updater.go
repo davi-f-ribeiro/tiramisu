@@ -70,10 +70,11 @@ func checkOnce(currentVersion string) {
 		return
 	}
 
-	// Dev builds always show the latest stable version
-	if currentVersion == "dev" || currentVersion == "" {
+	// Dev builds and branch names can't be compared to semver tags — show
+	// the latest release so the operator knows what's out there.
+	if currentVersion == "dev" || currentVersion == "main" || currentVersion == "" {
 		updateAvailable.Store(true)
-		logger.Printf("Dev build — stable release: %s", latest)
+		logger.Printf("Dev/branch build — stable release: %s", latest)
 		return
 	}
 

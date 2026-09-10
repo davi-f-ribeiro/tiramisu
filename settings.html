@@ -411,6 +411,28 @@
             cursor: default;
         }
 
+        .btn-secondary {
+            background: var(--card);
+            color: var(--text);
+            border: 1.5px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--section-bg);
+            border-color: var(--accent);
+        }
+
+        .btn-sm {
+            padding: 6px 14px;
+            font-size: 12px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 0;
+            width: auto;
+        }
+
         .status-msg {
             margin-top: 12px;
             padding: 8px;
@@ -821,6 +843,27 @@
         #sched-body.disabled {
             opacity: .4;
             pointer-events: none;
+        }
+
+        /* --- Subtitle toggle row --- */
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 4px 0;
+        }
+
+        .toggle-row label {
+            margin-bottom: 0;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .toggle-switch {
+            display: inline-flex;
+            align-items: center;
         }
     </style>
 </head>
