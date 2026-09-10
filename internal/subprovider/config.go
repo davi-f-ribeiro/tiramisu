@@ -85,3 +85,14 @@ func (sc SubtitleConfig) ToEngineConfig() EngineConfig {
 		OSDownloadTimeout:     15 * time.Second,
 	}
 }
+
+// getDefaultConfig returns a config with sensible defaults.
+func getDefaultConfig() EngineConfig {
+	return EngineConfig{
+		PreferredLanguages:    []LanguageTag{LangPortuguese, LangMulti, LangEnglish},
+		MaxResultsPerProvider: 5,
+		SubDBTimeout:          5 * time.Second,
+		OSDownloadTimeout:     15 * time.Second,
+		OpenSubtitlesBaseURL:  "https://api.opensubtitles.com",
+	}
+}
