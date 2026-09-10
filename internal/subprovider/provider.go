@@ -1,7 +1,6 @@
 package subprovider
 
 import (
-	"fmt"
 	"sync"
 )
 

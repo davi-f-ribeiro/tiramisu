@@ -2,55 +2,13 @@ package subprovider
 
 import (
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 )
 
 // ---------- Engine: orchestrator ----------
-
-// EngineConfig holds configuration for the subtitle engine.
-type EngineConfig struct {
-	// FUSEMountPath is the absolute path to the FUSE mount where .srt files will be written.
-	FUSEMountPath string
-
-	// PreferredLanguages is the ordered list of languages to search for.
-	// Highest priority first. Default: [por, multi, eng].
-	PreferredLanguages []LanguageTag
-
-	// OpenSubtitlesKey is the API key for OpenSubtitles REST API.
-	OpenSubtitlesKey string
-
-	// OpenSubtitlesBaseURL is the base URL (default: https://api.opensubtitles.com).
-	OpenSubtitlesBaseURL string
-
-	// OpenSubtitlesUser/Password for JWT login (optional).
-	OpenSubtitlesUser string
-	OpenSubtitlesPass string
-
-	// MaxResultsPerProvider limits how many subtitles each provider returns.
-	MaxResultsPerProvider int
-
-	// SubDBTimeout is the max time for SubDB search+download (default: 5s).
-	SubDBTimeout time.Duration
-
-	// OSDownloadTimeout is the max time for OS search+download (default: 15s).
-	OSDownloadTimeout time.Duration
-}
-
-// getDefaultConfig returns a config with sensible defaults.
-func getDefaultConfig() EngineConfig {
-	return EngineConfig{
-		PreferredLanguages:    []LanguageTag{LangPortuguese, LangMulti, LangEnglish},
-		MaxResultsPerProvider: 5,
-		SubDBTimeout:          5 * time.Second,
-		OSDownloadTimeout:     15 * time.Second,
-		OpenSubtitlesBaseURL:  "https://api.opensubtitles.com",
-	}
-}
 
 // SubtitleEngine is the main orchestrator. It runs two provider pipelines
 // (SubDB via video hash, then OpenSubtitles via IMDB ID) in sequence,
