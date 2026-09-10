@@ -1338,6 +1338,74 @@
                             </div>
                         </div>
                     </div>
+                    <div class="form-section">
+                        <div class="form-section-title">Subtitle Provider</div>
+
+                        <div class="form-group">
+                            <div class="toggle-row">
+                                <label>Enabled</label>
+                                <div class="toggle-switch">
+                                    <input type="checkbox" id="subtitle_enabled"
+                                        form="tiramisu-form">
+                                    <span class="slider"></span>
+                                </div>
+                            </div>
+                            <div class="hint">Enable subtitle provider (SubDB + OpenSubtitles)</div>
+                        </div>
+
+                        <div class="form-section" id="subtitle-advanced-section" style="margin-top: 12px; display: none;">
+                            <div class="form-group">
+                                <label>OpenSubtitles API Key</label>
+                                <input type="password" id="subtitle_api_key"
+                                    form="tiramisu-form"
+                                    placeholder="Enter your OpenSubtitles REST API key">
+                                <div class="hint">Required when enabled. Get from https://opensubtitles.org</div>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Base URL</label>
+                                <input type="text" id="subtitle_base_url"
+                                    form="tiramisu-form"
+                                    placeholder="https://api.opensubtitles.com">
+                                <div class="hint">Custom endpoint (leave default for OpenSubtitles.org)</div>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Username</label>
+                                <input type="text" id="subtitle_user"
+                                    form="tiramisu-form"
+                                    placeholder="Your OpenSubtitles username">
+                            </div>
+
+                            <div class="form-group">
+                                <label>Password</label>
+                                <input type="password" id="subtitle_password"
+                                    form="tiramisu-form"
+                                    placeholder="Your OpenSubtitles password">
+                            </div>
+
+                            <div class="form-group">
+                                <label>Preferred Languages</label>
+                                <input type="text" id="subtitle_preferred_languages"
+                                    form="tiramisu-form"
+                                    placeholder="por, multi, eng"
+                                    value="por, multi, eng">
+                                <div class="hint">Comma-separated language codes (ISO 639-2/B)</div>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Max Results Per Provider</label>
+                                <input type="number" id="subtitle_max_results"
+                                    form="tiramisu-form"
+                                    min="1" max="50" value="5">
+                                <div class="hint">How many results to request from each provider</div>
+                            </div>
+                        </div>
+
+                        <button type="button" class="btn btn-primary" onclick="saveSubtitle()"
+                            style="margin-top: 12px;">Apply Subtitle Settings</button>
+                        <div id="subtitle-save-status" class="status-msg"></div>
+                    </div>
 
                     <div class="form-section">
                         <div class="form-section-title">Quality Scoring</div>
@@ -2698,11 +2766,83 @@
             } catch (e) { console.error('stopSyncNow error', e); }
         }
 
+        // =============================================================
+        // Subtitle Provider
+        // =============================================================
+
+        async function loadSubtitle() {
+            try {
+                const res = await fetch('/api/config');
+                const cfg = await res.json();
+                const sub = cfg.subtitle || {};
+
+                document.getElementById('subtitle_enabled').checked = sub.enabled || false;
+                document.getElementById('subtitle_api_key').value = sub.api_key || '';
+                document.getElementById('subtitle_base_url').value = sub.base_url || 'https://api.opensubtitles.com';
+                document.getElementById('subtitle_user').value = sub.user || '';
+                document.getElementById('subtitle_password').value = sub.password || '';
+                document.getElementById('subtitle_preferred_languages').value = 
+                    (sub.preferred_languages || ['por', 'multi', 'eng']).join(', ');
+                document.getElementById('subtitle_max_results').value = sub.max_results || 5;
+
+                // Toggle advanced section visibility
+                _toggleSubtitleSection(sub.enabled || false);
+            } catch (e) { console.error('Subtitle load error', e); }
+        }
+
+        function _toggleSubtitleSection(enabled) {
+            const section = document.getElementById('subtitle-advanced-section');
+            if (section) {
+                section.style.display = enabled ? 'block' : 'none';
+            }
+        }
+
+        async function saveSubtitle() {
+            const status = document.getElementById('subtitle-save-status');
+            const enabled = document.getElementById('subtitle_enabled').checked;
+            const apiKey = document.getElementById('subtitle_api_key').value.trim();
+
+            if (enabled && !apiKey) {
+                status.textContent = '✗ API key required when enabled';
+                status.className = 'status-msg status-error';
+                setTimeout(() => { status.className = 'status-msg'; }, 5000);
+                return;
+            }
+
+            const cfgRes = await fetch('/api/config');
+            const data = await cfgRes.json();
+
+            data.subtitle = {
+                enabled: enabled,
+                api_key: apiKey,
+                base_url: document.getElementById('subtitle_base_url').value.trim(),
+                user: document.getElementById('subtitle_user').value.trim(),
+                password: document.getElementById('subtitle_password').value.trim(),
+                preferred_languages: document.getElementById('subtitle_preferred_languages').value
+                    .split(',').map(s => s.trim()).filter(s => s),
+                max_results: parseInt(document.getElementById('subtitle_max_results').value) || 5
+            };
+
+            const res = await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            status.textContent = res.ok ? '✓ Subtitle settings saved' : '✗ Save error';
+            status.className = 'status-msg ' + (res.ok ? 'status-success' : 'status-error');
+            setTimeout(() => { status.className = 'status-msg'; }, 5000);
+            if (res.ok) loadSubtitle();
+        }
+
         // Build pickers then load data
         buildDayPicker('sched-movies-days');
         buildDayPicker('sched-tv-days');
         loadScheduler();
         setInterval(loadScheduler, 30000);
+
+        // Load subtitle data
+        loadSubtitle();
 
     </script>
 </body>
