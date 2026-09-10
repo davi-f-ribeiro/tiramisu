@@ -261,6 +261,17 @@ type Config struct {
 	// --- Language Matching ---
 	Language LanguageConfig `json:"language"`
 
+	// --- Subtitle Provider (D1-D5: Rota C) ---
+	Subtitle struct {
+		Enabled      bool   `json:"enabled"`
+		APIKey       string `json:"api_key"`        // OpenSubtitles REST API key
+		BaseURL      string `json:"base_url"`       // Optional custom base URL
+		User         string `json:"user"`           // Optional username for JWT
+		Password     string `json:"password"`       // Optional password for JWT
+		Preferred    []string `json:"preferred_languages"` // e.g. ["por", "multi", "eng"]
+		MaxResults   int    `json:"max_results"`    // default: 5
+	} `json:"subtitle"`
+
 	// --- Engine Scripts (populated in LoadConfig, not from JSON) ---
 	EngineScripts map[string]EngineConfig `json:"-"`
 
