@@ -6,8 +6,13 @@ RUN apt-get update \
 
 WORKDIR /src
 
-# Copy go.mod and go.sum first for dependency caching
+# Copy root go.mod and go.sum first for dependency caching
 COPY go.mod go.sum ./
+
+# Copy go.mod/go.sum for local replaced modules (anacrolix-torrent)
+COPY internal/anacrolix-torrent/go.mod internal/anacrolix-torrent/go.mod
+COPY internal/anacrolix-torrent/go.sum internal/anacrolix-torrent/go.sum
+
 RUN go mod download
 
 # Copy the rest of the source
