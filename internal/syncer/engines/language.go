@@ -63,6 +63,7 @@ var excludedFlagLanguages = map[string]countryLanguage{
 	"ES": {tmdbCodes: []string{"es"}, titleTerms: []string{"spanish", "castellano", "latino"}},
 	"FR": {tmdbCodes: []string{"fr"}, titleTerms: []string{"french", "vff", "truefrench"}},
 	"DE": {tmdbCodes: []string{"de"}, titleTerms: []string{"german"}},
+	"IT": {tmdbCodes: []string{"it"}, titleTerms: []string{"italian", "italiano", "italian dd"}},
 	"RU": {tmdbCodes: []string{"ru"}, titleTerms: []string{"russian"}},
 	"CN": {tmdbCodes: []string{"zh"}, titleTerms: []string{"chinese", "mandarin", "cantonese"}},
 	"JP": {tmdbCodes: []string{"ja"}, titleTerms: []string{"japanese"}},
