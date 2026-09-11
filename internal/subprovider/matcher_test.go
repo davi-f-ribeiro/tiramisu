@@ -82,6 +82,13 @@ func TestDetectPortugueseVariant(t *testing.T) {
 			wantVariant:   VariantUnknown,
 			wantConfidence: 0,
 		},
+		{
+			name:          "Tu at start of sentences (marker fix verification)",
+			content:       []byte("Tu viste isso? Tu não sabias. Vós viajaste de autocarro. O telemóvel não tinha bateria. O comboio saiu atrasado. Frigorífico cheio. Gelado derretido. Bicha no supermercado. Casa de banho suja. Rapaz simpático. Fixe demais. Miúdo na escola. Equipa venceu."),
+			minSample:     3,
+			wantVariant:   VariantPT,
+			wantConfidence: 1.0,
+		},
 	}
 
 	for _, tt := range tests {
