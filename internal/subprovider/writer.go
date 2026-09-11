@@ -11,7 +11,8 @@ import (
 
 // Writer handles writing subtitle sidecar files to the FUSE mount.
 type Writer struct {
-	fuseMountPath string // e.g. "/mnt/tiramisu-mkv-virtual"
+	fuseMountPath    string
+	OnSidecarWritten func(dirPath string) // optional, may be nil
 }
 
 // NewWriter creates a new Writer for the given FUSE mount path.
@@ -75,6 +76,10 @@ func (w *Writer) WriteSidecar(videoPath string, content []byte, lang LanguageTag
 	if err := os.Rename(tmpPath, srtPath); err != nil {
 		os.Remove(tmpPath) // clean up
 		return "", fmt.Errorf("subprovider: rename %s → %s: %w", tmpPath, srtPath, err)
+	}
+
+	if w.OnSidecarWritten != nil {
+		w.OnSidecarWritten(filepath.Dir(srtPath))
 	}
 
 	logf("WriteSidecar: wrote %d bytes → %s", len(content), srtPath)

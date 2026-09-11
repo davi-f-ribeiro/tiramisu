@@ -63,22 +63,21 @@ func NewSubtitleEngine(cfg EngineConfig) (*SubtitleEngine, error) {
 // SubtitleJob represents a request to download a subtitle.
 type SubtitleJob struct {
 	// Input (provided by caller)
-	VideoPath     string      // full path to .mkv in FUSE mount
-	TorrentName   string      // torrent/filename (e.g. "Interstellar.2014.1080p.BluRay.x264.YTS")
-	VideoHash     string      // SubDB MD5 hash of first+last 64KB (may be empty)
-	ImdbID        string      // IMDB ID (e.g. "tt0816692")
-	PreferredLang LanguageTag // user's preferred language
+	VideoPath     string        // full path to .mkv in FUSE mount
+	TorrentName   string        // torrent/filename (e.g. "Interstellar.2014.1080p.BluRay.x264.YTS")
+	VideoHash     string        // SubDB MD5 hash of first+last 64KB (may be empty)
+	ImdbID        string        // IMDB ID (e.g. "tt0816692")
+	PreferredLang LanguageTag   // user's preferred language
 
-	// Output (sent through resultCh)
+	// Output (sent through resultCh — overwritten by Run() internally)
 	ResultCh chan<- Result
 }
 
 // Run launches the subtitle download pipeline for a single job.
-// Returns immediately (fire-and-forget goroutine).
-// The result is sent through job.ResultCh when done (or after timeout).
-func (e *SubtitleEngine) Run(job SubtitleJob) {
+// Returns a channel that receives the Result when done (or after timeout).
+// The caller owns the returned channel and must read from it.
+func (e *SubtitleEngine) Run(job SubtitleJob) <-chan Result {
 	ch := make(chan Result, 1)
-	job.ResultCh = ch
 
 	go func() {
 		torrentName := job.TorrentName
@@ -91,7 +90,7 @@ func (e *SubtitleEngine) Run(job SubtitleJob) {
 		if e.writer.FileExists(srtPath) {
 			logf("subtitle cache hit: %s", srtPath)
 			ch <- Result{
-				Content:  nil, // nil = using existing file on disk
+				Content:  nil,
 				Filename: srtPath,
 				Provider: "cache",
 				Language: string(job.PreferredLang),
@@ -100,32 +99,47 @@ func (e *SubtitleEngine) Run(job SubtitleJob) {
 			return
 		}
 
+		wantsBR := job.PreferredLang == LangPortugueseBR
+
 		// Phase 1: SubDB (hash-based, fast)
 		if job.VideoHash != "" {
-			if content, filename, err := e.trySubDBDownload(job.VideoHash, job.PreferredLang, torrentName, job.VideoPath); err == nil {
-				logf("phase 1: subdb success → %s", filename)
-				ch <- Result{
-					Content:  content,
-					Filename: filename,
-					Provider: "subdb",
-					Language: string(job.PreferredLang),
-					Error:    nil,
+			content, srtPath, lang, err := e.trySubDBDownload(job.VideoHash, job.PreferredLang, torrentName, job.VideoPath)
+			if err == nil {
+				// Detect variant to decide whether to accept SubDB result
+				variant, confidence := DetectPortugueseVariant(content, 8)
+
+				if wantsBR && variant == VariantPT && confidence > 0.7 {
+					logf("[SUB] SubDB returned PT-PT (confidence %.2f), BR preferred — falling back to OpenSubtitles", confidence)
+				} else {
+					logf("phase 1: subdb success → %s", srtPath)
+					ch <- Result{
+						Content:  content,
+						Filename: srtPath,
+						Provider: "subdb",
+						Language: lang,
+						Error:    nil,
+					}
+					return
 				}
-				return
 			} else {
 				logf("phase 1: subdb failed: %v", err)
 			}
 		}
 
 		// Phase 2: OpenSubtitles (IMDB ID, fallback)
+		osLang := LangPortuguese
+		if wantsBR {
+			osLang = LangPortugueseBR
+		}
 		if job.ImdbID != "" {
-			if content, filename, err := e.tryOSDownload(job.ImdbID, job.PreferredLang, torrentName, job.VideoPath); err == nil {
-				logf("phase 2: opensubtitles success → %s", filename)
+			content, srtPath, lang, err := e.tryOSDownload(job.ImdbID, osLang, torrentName, job.VideoPath)
+			if err == nil {
+				logf("phase 2: opensubtitles success → %s", srtPath)
 				ch <- Result{
 					Content:  content,
-					Filename: filename,
+					Filename: srtPath,
 					Provider: "opensubtitles",
-					Language: string(job.PreferredLang),
+					Language: lang,
 					Error:    nil,
 				}
 				return
@@ -145,7 +159,7 @@ func (e *SubtitleEngine) Run(job SubtitleJob) {
 		}
 	}()
 
-	// Set a deadline: total timeout = max(SubDBTimeout, OSDownloadTimeout), capped at 30s
+	// Set a deadline: total timeout = SubDBTimeout + OSDownloadTimeout, capped at 30s
 	go func() {
 		totalTimeout := e.cfg.SubDBTimeout + e.cfg.OSDownloadTimeout
 		if totalTimeout > 30*time.Second {
@@ -163,23 +177,39 @@ func (e *SubtitleEngine) Run(job SubtitleJob) {
 		default:
 		}
 	}()
+
+	return ch
+}
+
+// writeSubtitleSidecar writes the downloaded subtitle to disk.
+// Called inside trySubDBDownload / tryOSDownload so they have access
+// to sub.Language for the WriteSidecar call.
+func (e *SubtitleEngine) writeSubtitleSidecar(content []byte, videoPath string, lang LanguageTag) (string, error) {
+	srtPath := e.writer.BuildSRTPath(videoPath, lang)
+	written, err := e.writer.WriteSidecar(videoPath, content, lang)
+	if err != nil {
+		return "", err
+	}
+	_ = written
+	return srtPath, nil
 }
 
 // trySubDBDownload searches and downloads a subtitle via SubDB.
-func (e *SubtitleEngine) trySubDBDownload(videoHash string, lang LanguageTag, torrentName, videoPath string) ([]byte, string, error) {
+// Returns (content, srtPath, languageString, error).
+func (e *SubtitleEngine) trySubDBDownload(videoHash string, lang LanguageTag, torrentName, videoPath string) ([]byte, string, string, error) {
 	// Rate limit check (15 tokens / 15 minutes)
 	if !e.tryAcquireSubDBToken() {
-		return nil, "", fmt.Errorf("subdb rate limited (15/15min, retry later)")
+		return nil, "", "", fmt.Errorf("subdb rate limited (15/15min, retry later)")
 	}
 	defer e.releaseSubDBToken()
 
 	// Search for available languages
 	results, err := e.subdb.Search(videoHash, "", torrentName, lang, e.cfg.MaxResultsPerProvider)
 	if err != nil {
-		return nil, "", fmt.Errorf("subdb search: %w", err)
+		return nil, "", "", fmt.Errorf("subdb search: %w", err)
 	}
 	if results == nil || len(results) == 0 {
-		return nil, "", fmt.Errorf("subdb: no languages available for hash %s", videoHash[:min(len(videoHash), 8)])
+		return nil, "", "", fmt.Errorf("subdb: no languages available for hash %s", videoHash[:min(len(videoHash), 8)])
 	}
 
 	// Select best match using language preference + release profile
@@ -193,24 +223,29 @@ func (e *SubtitleEngine) trySubDBDownload(videoHash string, lang LanguageTag, to
 	// Download the subtitle
 	content, err := e.subdb.Download(sub)
 	if err != nil {
-		return nil, "", fmt.Errorf("subdb download: %w", err)
+		return nil, "", "", fmt.Errorf("subdb download: %w", err)
 	}
 
-	// Build the .srt filename for this video+language
-	srtPath := e.writer.BuildSRTPath(videoPath, sub.Language)
+	// Write sidecar to disk (core fix: persist subtitle to FUSE mount)
+	written, err := e.writeSubtitleSidecar(content, videoPath, sub.Language)
+	if err != nil {
+		logf("subdb: failed to write sidecar: %v", err)
+		return nil, "", "", fmt.Errorf("subdb: write sidecar: %w", err)
+	}
 
-	return content, srtPath, nil
+	return content, written, string(sub.Language), nil
 }
 
 // tryOSDownload searches and downloads a subtitle via OpenSubtitles.
-func (e *SubtitleEngine) tryOSDownload(imdbID string, lang LanguageTag, torrentName, videoPath string) ([]byte, string, error) {
+// Returns (content, srtPath, languageString, error).
+func (e *SubtitleEngine) tryOSDownload(imdbID string, lang LanguageTag, torrentName, videoPath string) ([]byte, string, string, error) {
 	// Search for subtitles
 	results, err := e.os.Search("", imdbID, torrentName, lang, e.cfg.MaxResultsPerProvider)
 	if err != nil {
-		return nil, "", fmt.Errorf("os search: %w", err)
+		return nil, "", "", fmt.Errorf("os search: %w", err)
 	}
 	if results == nil || len(results) == 0 {
-		return nil, "", fmt.Errorf("os: no subtitles found for %s", imdbID)
+		return nil, "", "", fmt.Errorf("os: no subtitles found for %s", imdbID)
 	}
 
 	// Select best match
@@ -224,12 +259,17 @@ func (e *SubtitleEngine) tryOSDownload(imdbID string, lang LanguageTag, torrentN
 	// Download
 	content, err := e.os.Download(sub)
 	if err != nil {
-		return nil, "", fmt.Errorf("os download: %w", err)
+		return nil, "", "", fmt.Errorf("os download: %w", err)
 	}
 
-	srtPath := e.writer.BuildSRTPath(videoPath, sub.Language)
+	// Write sidecar to disk
+	written, err := e.writeSubtitleSidecar(content, videoPath, sub.Language)
+	if err != nil {
+		logf("os: failed to write sidecar: %v", err)
+		return nil, "", "", fmt.Errorf("os: write sidecar: %w", err)
+	}
 
-	return content, srtPath, nil
+	return content, written, string(sub.Language), nil
 }
 
 // tryAcquireSubDBToken implements the 15-token/15-minute sliding window.
@@ -307,4 +347,9 @@ func (e *SubtitleEngine) DeleteCachedSubtitle(videoPath string, lang LanguageTag
 		return true
 	}
 	return false
+}
+
+// GetWriter returns the engine's writer (exported for main.go to wire OnSidecarWritten).
+func (e *SubtitleEngine) GetWriter() *Writer {
+	return e.writer
 }

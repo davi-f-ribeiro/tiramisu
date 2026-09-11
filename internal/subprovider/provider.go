@@ -8,9 +8,10 @@ import (
 type LanguageTag string
 
 const (
-	LangPortuguese LanguageTag = "por"
-	LangEnglish    LanguageTag = "eng"
-	LangMulti      LanguageTag = "multi"
+	LangPortuguese   LanguageTag = "por"
+	LangPortugueseBR LanguageTag = "pob"
+	LangEnglish      LanguageTag = "eng"
+	LangMulti        LanguageTag = "multi"
 )
 
 // Subtitle is the common payload returned by a provider's Search method.

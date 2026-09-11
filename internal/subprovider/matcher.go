@@ -164,3 +164,57 @@ func BestSubtitleByTorrentName(subs []Subtitle, torrentName string) *Subtitle {
 
 	return best
 }
+
+// PortugueseVariant represents a detected Portuguese regional variant.
+type PortugueseVariant string
+
+const (
+	VariantBR      PortugueseVariant = "pob"
+	VariantPT      PortugueseVariant = "por"
+	VariantUnknown PortugueseVariant = ""
+)
+
+var brMarkers = []string{
+	"você", "vocês", "ônibus", "celular", "trem", "geladeira",
+	"sorvete", "fila", "banheiro", "legal", "garoto", "time",
+}
+
+var ptMarkers = []string{
+	" tu ", "vós", "autocarro", "telemóvel", "comboio",
+	"frigorífico", "gelado", "bicha", "casa de banho", "rapaz",
+	"fixe", "miúdo", "equipa",
+}
+
+// DetectPortugueseVariant analyzes the content of an .srt subtitle
+// and estimates whether it is PT-BR or PT-PT via distinctive vocabulary,
+// since SubDB does not allow filtering by regional variant on search
+// (returns a single ambiguous "pt" result).
+//
+// minSampleWords is the floor of total occurrences before trusting
+// the result. Returns VariantUnknown/confidence=0 if sample is too
+// small or there is an exact tie.
+func DetectPortugueseVariant(content []byte, minSampleWords int) (variant PortugueseVariant, confidence float64) {
+	text := strings.ToLower(string(content))
+	brScore := countOccurrences(text, brMarkers)
+	ptScore := countOccurrences(text, ptMarkers)
+	total := brScore + ptScore
+
+	if total < minSampleWords {
+		return VariantUnknown, 0
+	}
+	if brScore > ptScore {
+		return VariantBR, float64(brScore) / float64(total)
+	}
+	if ptScore > brScore {
+		return VariantPT, float64(ptScore) / float64(total)
+	}
+	return VariantUnknown, 0.5
+}
+
+func countOccurrences(text string, markers []string) int {
+	count := 0
+	for _, m := range markers {
+		count += strings.Count(text, m)
+	}
+	return count
+}
