@@ -51,7 +51,7 @@
     "base_url": "https://api.opensubtitles.com",
     "user": "",
     "password": "",
-    "preferred_languages": ["por", "multi", "eng"],
+    "preferred_languages": ["pob", "por", "multi", "eng"],
     "max_results": 5
   }
 }
