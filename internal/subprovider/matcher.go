@@ -180,7 +180,7 @@ var brMarkers = []string{
 }
 
 var ptMarkers = []string{
-	" tu ", "vós", "autocarro", "telemóvel", "comboio",
+	"tu ", "vós", "autocarro", "telemóvel", "comboio",
 	"frigorífico", "gelado", "bicha", "casa de banho", "rapaz",
 	"fixe", "miúdo", "equipa",
 }
