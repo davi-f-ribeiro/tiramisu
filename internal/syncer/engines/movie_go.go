@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -36,6 +37,7 @@ type MovieGoEngine struct {
 	plexLib   int
 	mediasrv  mediaserver.Client
 	moviesDir string
+	fuseMountPath string
 	stateDir  string
 	limiter   *rate.Limiter
 	logger    *log.Logger
@@ -94,6 +96,7 @@ type MovieEngineConfig struct {
 	MediaServerType string
 	PlexLib         int
 	MoviesDir       string
+	FuseMountPath   string
 	StateDir        string
 	LogsDir         string
 	ProwlarrCfg     prowlarr.ConfigProwlarr
@@ -162,6 +165,7 @@ func NewMovieGoEngine(cfg MovieEngineConfig) *MovieGoEngine {
 		mediasrv:  mediaserver.New(cfg.MediaServerType, cfg.PlexURL, cfg.PlexToken),
 		moviesDir: cfg.MoviesDir,
 		stateDir:  cfg.StateDir,
+		fuseMountPath: cfg.FuseMountPath,
 		limiter:   rate.NewLimiter(rate.Every(250*time.Millisecond), 1),
 		logger:    logger,
 
@@ -194,14 +198,30 @@ func NewMovieGoEngine(cfg MovieEngineConfig) *MovieGoEngine {
 
 // removeStub deletes a stub file, invalidates its FUSE cache state, and removes the
 // underlying torrent from GoStorm. hash may be empty; a RemoveTorrent error doesn't
-// block the stub deletion.
+// block the stub deletion. Per o skill, remove sempre via FUSE mount ($FUSE) para que
+// o handler VirtualDirNode.Unlink() cuide de fechar handles, desregistrar o torrent do
+// GoStorm, escrever no blacklist.json e limpar registry/dirCache.
 func (e *MovieGoEngine) removeStub(ctx context.Context, path, hash string) {
 	if hash != "" {
 		if err := e.gostorm.RemoveTorrent(ctx, hash); err != nil {
 			e.logger.Printf("[MovieSync] WARNING: failed to remove torrent %s for %s: %v", hash, filepath.Base(path), err)
 		}
 	}
-	os.Remove(path)
+
+	// Map physical path to FUSE mount path for syscall.Unlink
+	// Physical: /mnt/tiramisu-torrserver-stubs-mkv/movies/
+	// FUSE: /mnt/tiramisu-mkv-virtual/
+	if e.fuseMountPath != "" {
+		fusePath := strings.Replace(path, e.moviesDir, e.fuseMountPath, 1)
+		e.logger.Printf("[MovieSync] Unlinking stub via FUSE: %s -> %s", filepath.Base(path), fusePath)
+		if err := syscall.Unlink(fusePath); err != nil {
+			e.logger.Printf("[MovieSync] WARNING: syscall.Unlink failed for %s: %v (falling back to os.Remove)", fusePath, err)
+			os.Remove(path)
+		}
+	} else {
+		os.Remove(path)
+	}
+
 	if e.invalidatePath != nil {
 		e.invalidatePath(path)
 	}

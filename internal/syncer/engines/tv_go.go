@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -35,6 +36,7 @@ type TVGoEngine struct {
 	plexTVLib int
 	mediasrv  mediaserver.Client
 	tvDir     string
+	fuseMountPath string
 	stateDir  string
 	limiter   *rate.Limiter
 	logger    *log.Logger
@@ -57,13 +59,8 @@ type TVGoEngine struct {
 
 	weights config.TVWeights
 
-	// knownTitles caches a show's TMDB aliases for the process lifetime, not per
-	// run: aliases change rarely, and refetching ~100 shows every run would cost
-	// ~25s of rate-limited calls. A show met for the first time is always fetched.
 	knownTitles map[int][]string
-
-	// tmdbLangs are the languages a show's localized name is fetched in.
-	tmdbLangs []string
+	tmdbLangs   []string
 }
 
 // TVEpisodeEntry is a single entry in the TV episode registry.
@@ -93,6 +90,7 @@ type TVEngineConfig struct {
 	MediaServerType string
 	PlexTVLib       int
 	TVDir           string
+	FuseMountPath   string
 	StateDir        string
 	LogsDir         string
 	ProwlarrCfg     prowlarr.ConfigProwlarr
@@ -176,6 +174,7 @@ func NewTVGoEngine(cfg TVEngineConfig, db *metadb.DB) *TVGoEngine {
 		mediasrv:         mediaserver.New(cfg.MediaServerType, cfg.PlexURL, cfg.PlexToken),
 		tvDir:            cfg.TVDir,
 		stateDir:         cfg.StateDir,
+		fuseMountPath:    cfg.FuseMountPath,
 		limiter:          rate.NewLimiter(rate.Every(500*time.Millisecond), 1),
 		logger:           logger,
 		registryFile:     regFile,
@@ -200,13 +199,28 @@ func NewTVGoEngine(cfg TVEngineConfig, db *metadb.DB) *TVGoEngine {
 // removeStub deletes a stub file/dir, invalidates its FUSE cache state, and removes the
 // underlying torrent from GoStorm. hash may be empty (e.g. for a plain directory); a
 // failed RemoveTorrent doesn't block the stub deletion.
+// Per o skill, remove sempre via FUSE mount ($FUSE) para que o handler VirtualDirNode.Unlink()
+// cuide de fechar handles, desregistrar o torrent do GoStorm, escrever no blacklist.json e limpar
+// registry/dirCache.
 func (e *TVGoEngine) removeStub(ctx context.Context, path, hash string) {
 	if hash != "" {
 		if err := e.gostorm.RemoveTorrent(ctx, hash); err != nil {
 			e.logger.Printf("[TVSync] WARNING: failed to remove torrent %s for %s: %v", hash, filepath.Base(path), err)
 		}
 	}
-	os.Remove(path)
+
+	// Map physical path to FUSE mount path for syscall.Unlink
+	if e.fuseMountPath != "" {
+		fusePath := strings.Replace(path, e.tvDir, e.fuseMountPath, 1)
+		e.logger.Printf("[TVSync] Unlinking stub via FUSE: %s -> %s", filepath.Base(path), fusePath)
+		if err := syscall.Unlink(fusePath); err != nil {
+			e.logger.Printf("[TVSync] WARNING: syscall.Unlink failed for %s: %v (falling back to os.Remove)", fusePath, err)
+			os.Remove(path)
+		}
+	} else {
+		os.Remove(path)
+	}
+
 	if e.invalidatePath != nil {
 		e.invalidatePath(path)
 	}
