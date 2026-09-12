@@ -37,6 +37,7 @@ type TVGoEngine struct {
 	mediasrv  mediaserver.Client
 	tvDir     string
 	fuseMountPath string
+	sourcePath  string // FUSE mount root (e.g. /mnt/tiramisu-mkv-real)
 	stateDir  string
 	limiter   *rate.Limiter
 	logger    *log.Logger
@@ -173,8 +174,9 @@ func NewTVGoEngine(cfg TVEngineConfig, db *metadb.DB) *TVGoEngine {
 		plexTVLib:        cfg.PlexTVLib,
 		mediasrv:         mediaserver.New(cfg.MediaServerType, cfg.PlexURL, cfg.PlexToken),
 		tvDir:            cfg.TVDir,
-		stateDir:         cfg.StateDir,
+		sourcePath:       filepath.Dir(filepath.Clean(filepath.Join(cfg.TVDir, ".."))),
 		fuseMountPath:    cfg.FuseMountPath,
+		stateDir:         cfg.StateDir,
 		limiter:          rate.NewLimiter(rate.Every(500*time.Millisecond), 1),
 		logger:           logger,
 		registryFile:     regFile,
@@ -210,14 +212,34 @@ func (e *TVGoEngine) removeStub(ctx context.Context, path, hash string) {
 	}
 
 	// Map physical path to FUSE mount path for syscall.Unlink
+	// The FUSE mount is rooted at sourcePath (e.g. /mnt/tiramisu-mkv-real),
+	// so we compute the relative path from sourcePath and join it to fuseMountPath.
+	// Example: /mnt/tiramisu-mkv-real/tv/show/s01e01.mkv -> /mnt/tiramisu-mkv-virtual/tv/show/s01e01.mkv
 	if e.fuseMountPath != "" {
-		fusePath := strings.Replace(path, e.tvDir, e.fuseMountPath, 1)
+		rel, err := filepath.Rel(e.sourcePath, path)
+		if err != nil {
+			e.logger.Printf("[TVSync] ERROR: filepath.Rel failed for %s (source=%s): %v — falling back to os.Remove",
+				path, e.sourcePath, err)
+			os.Remove(path)
+			return
+		}
+		fusePath := filepath.Join(e.fuseMountPath, rel)
 		e.logger.Printf("[TVSync] Unlinking stub via FUSE: %s -> %s", filepath.Base(path), fusePath)
 		if err := syscall.Unlink(fusePath); err != nil {
-			e.logger.Printf("[TVSync] WARNING: syscall.Unlink failed for %s: %v (falling back to os.Remove)", fusePath, err)
+			e.logger.Printf("[TVSync] ERROR: syscall.Unlink failed for %s: %v", fusePath, err)
+			// CRITICAL: do NOT silently fall back to os.Remove — it bypasses FUSE cleanup
+			// (blacklist, torrent deregister, registry). Write manual blacklist as emergency.
+			e.logger.Printf("[TVSync] WARNING: writing emergency blacklist for %s", filepath.Base(path))
+			e.blacklist.Titles = append(e.blacklist.Titles, filepath.Base(path))
+			if data, err := json.Marshal(e.blacklist); err == nil {
+				os.WriteFile(e.blacklistFile, data, 0644)
+			}
 			os.Remove(path)
+			return
 		}
+		e.logger.Printf("[TVSync] Unlink via FUSE succeeded for %s", filepath.Base(path))
 	} else {
+		e.logger.Printf("[TVSync] WARNING: fuseMountPath is empty, using os.Remove for %s", filepath.Base(path))
 		os.Remove(path)
 	}
 

@@ -38,6 +38,7 @@ type MovieGoEngine struct {
 	mediasrv  mediaserver.Client
 	moviesDir string
 	fuseMountPath string
+	sourcePath string // FUSE mount root (e.g. /mnt/tiramisu-mkv-real)
 	stateDir  string
 	limiter   *rate.Limiter
 	logger    *log.Logger
@@ -164,8 +165,9 @@ func NewMovieGoEngine(cfg MovieEngineConfig) *MovieGoEngine {
 		plexLib:   cfg.PlexLib,
 		mediasrv:  mediaserver.New(cfg.MediaServerType, cfg.PlexURL, cfg.PlexToken),
 		moviesDir: cfg.MoviesDir,
-		stateDir:  cfg.StateDir,
+		sourcePath: filepath.Dir(filepath.Clean(filepath.Join(cfg.MoviesDir, ".."))),
 		fuseMountPath: cfg.FuseMountPath,
+		stateDir:  cfg.StateDir,
 		limiter:   rate.NewLimiter(rate.Every(250*time.Millisecond), 1),
 		logger:    logger,
 
@@ -209,16 +211,34 @@ func (e *MovieGoEngine) removeStub(ctx context.Context, path, hash string) {
 	}
 
 	// Map physical path to FUSE mount path for syscall.Unlink
-	// Physical: /mnt/tiramisu-torrserver-stubs-mkv/movies/
-	// FUSE: /mnt/tiramisu-mkv-virtual/
+	// The FUSE mount is rooted at sourcePath (e.g. /mnt/tiramisu-mkv-real),
+	// so we compute the relative path from sourcePath and join it to fuseMountPath.
+	// Example: /mnt/tiramisu-mkv-real/movies/foo.mkv -> /mnt/tiramisu-mkv-virtual/movies/foo.mkv
 	if e.fuseMountPath != "" {
-		fusePath := strings.Replace(path, e.moviesDir, e.fuseMountPath, 1)
+		rel, err := filepath.Rel(e.sourcePath, path)
+		if err != nil {
+			e.logger.Printf("[MovieSync] ERROR: filepath.Rel failed for %s (source=%s): %v — falling back to os.Remove",
+				path, e.sourcePath, err)
+			os.Remove(path)
+			return
+		}
+		fusePath := filepath.Join(e.fuseMountPath, rel)
 		e.logger.Printf("[MovieSync] Unlinking stub via FUSE: %s -> %s", filepath.Base(path), fusePath)
 		if err := syscall.Unlink(fusePath); err != nil {
-			e.logger.Printf("[MovieSync] WARNING: syscall.Unlink failed for %s: %v (falling back to os.Remove)", fusePath, err)
+			e.logger.Printf("[MovieSync] ERROR: syscall.Unlink failed for %s: %v", fusePath, err)
+			// CRITICAL: do NOT silently fall back to os.Remove — it bypasses FUSE cleanup
+			// (blacklist, torrent deregister, registry). Write manual blacklist as emergency.
+			e.logger.Printf("[MovieSync] WARNING: writing emergency blacklist for %s", filepath.Base(path))
+			e.blacklist.Titles = append(e.blacklist.Titles, filepath.Base(path))
+			if data, err := json.Marshal(e.blacklist); err == nil {
+				os.WriteFile(e.blacklistFile, data, 0644)
+			}
 			os.Remove(path)
+			return
 		}
+		e.logger.Printf("[MovieSync] Unlink via FUSE succeeded for %s", filepath.Base(path))
 	} else {
+		e.logger.Printf("[MovieSync] WARNING: fuseMountPath is empty, using os.Remove for %s", filepath.Base(path))
 		os.Remove(path)
 	}
 
