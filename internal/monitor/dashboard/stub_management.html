@@ -141,9 +141,9 @@ function renderList(type,stubs){
       <div class="text-right flex-shrink-0">
         <div class="text-xs status-label">${s.status||'unknown'}</div>
         <div class="flex gap-1 mt-1">
-          <button onclick="changeSource('${s.id}','${s.type}')" class="bg-slate-600 hover:bg-blue-600 text-white text-[10px] py-1 px-2 rounded transition">Change</button>
-          <button onclick="rehydrateStub('${s.id}','${s.type}')" class="bg-slate-600 hover:bg-orange-600 text-white text-[10px] py-1 px-2 rounded transition">Rehydrate</button>
-          <button onclick="removeStub('${s.id}','${s.type}')" class="bg-slate-600 hover:bg-red-600 text-white text-[10px] py-1 px-2 rounded transition">Remove</button>
+          <button onclick="changeSource('${s.filename}','${s.type}')" class="bg-slate-600 hover:bg-blue-600 text-white text-[10px] py-1 px-2 rounded transition">Change</button>
+          <button onclick="rehydrateStub('${s.filename}','${s.type}')" class="bg-slate-600 hover:bg-orange-600 text-white text-[10px] py-1 px-2 rounded transition">Rehydrate</button>
+          <button onclick="removeStub('${s.filename}','${s.type}')" class="bg-slate-600 hover:bg-red-600 text-white text-[10px] py-1 px-2 rounded transition">Remove</button>
         </div>
       </div>
     </div>`;
@@ -154,10 +154,14 @@ async function changeSource(id,type){
   const src=prompt('Enter URL or Magnet link, or candidate ID:');
   if(!src)return;
   try{
-    const r=await fetch(API_BASE+'/api/stubs/'+id+'/source',{
+    const body={};
+    if(src.startsWith('magnet:')) body.magnet=src;
+    else if(src.startsWith('http')) body.stream_url=src;
+    else body.candidate_id=src;
+    const r=await fetch(API_BASE+'/api/stubs/'+encodeURIComponent(id)+'/source',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({source:src,type:type})
+      body:JSON.stringify(body)
     });
     if(r.ok){alert('Source changed');refreshStubs();}
     else alert('Failed: '+(await r.text()));
@@ -167,10 +171,9 @@ async function changeSource(id,type){
 async function rehydrateStub(id,type){
   if(!confirm('Force rehydrate this stub?'))return;
   try{
-    const r=await fetch(API_BASE+'/api/stubs/'+id+'/rehydrate',{
+    const r=await fetch(API_BASE+'/api/stubs/'+encodeURIComponent(id)+'/rehydrate',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({type:type})
     });
     if(r.ok){alert('Rehydration triggered');refreshStubs();}
     else alert('Failed: '+(await r.text()));
@@ -180,10 +183,9 @@ async function rehydrateStub(id,type){
 async function removeStub(id,type){
   if(!confirm('Remove this stub and its torrent?'))return;
   try{
-    const r=await fetch(API_BASE+'/api/stubs/'+id,{
+    const r=await fetch(API_BASE+'/api/stubs/'+encodeURIComponent(id)+'/remove',{
       method:'DELETE',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({type:type})
     });
     if(r.ok){alert('Stub removed');refreshStubs();}
     else alert('Failed: '+(await r.text()));
