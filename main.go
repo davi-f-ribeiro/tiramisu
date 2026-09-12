@@ -53,6 +53,7 @@ import (
 	"tiramisu/internal/registry"
 	syncercache "tiramisu/internal/syncer/cache"
 	"tiramisu/internal/syncer/engines"
+	syncer "tiramisu/internal/syncer"
 	"tiramisu/internal/syncer/scheduler"
 	"tiramisu/internal/telemetry"
 	"tiramisu/internal/updater"
@@ -4721,6 +4722,63 @@ func main() {
 		} else {
 			logger.Printf("[Scheduler] auto-run disabled, manual API available")
 		}
+	}
+
+	// Stub Management API
+	stubsMoviesDir := filepath.Join(gc().PhysicalSourcePath, "movies")
+	stubsTVDir := filepath.Join(gc().PhysicalSourcePath, "tv")
+	
+	// Create dedicated stub management engines (don't share with scheduler to avoid side-effects)
+	movieStubEngine := engines.NewMovieGoEngine(engines.MovieEngineConfig{
+		GoStormURL:      gc().GoStormBaseURL,
+		TMDBAPIKey:      gc().TMDBAPIKey,
+		TorrentioURL:    gc().TorrentioURL,
+		PlexURL:         gc().Plex.URL,
+		PlexToken:       gc().Plex.Token,
+		MediaServerType: gc().MediaServerType,
+		PlexLib:         gc().Plex.LibraryID,
+		MoviesDir:       stubsMoviesDir,
+		StateDir:        GetStateDir(),
+		LogsDir:         gc().LogDir,
+		ProwlarrCfg:     gc().Prowlarr,
+		Language:        gc().Language,
+		Weights:         gc().QualityScoringConfig.MovieWeights(),
+		InvalidatePath:  invalidateSyncRemovedPath,
+	})
+	
+	tvStubEngine := engines.NewTVGoEngine(engines.TVEngineConfig{
+		GoStormURL:      gc().GoStormBaseURL,
+		TMDBAPIKey:      gc().TMDBAPIKey,
+		TorrentioURL:    gc().TorrentioURL,
+		PlexURL:         gc().Plex.URL,
+		PlexToken:       gc().Plex.Token,
+		MediaServerType: gc().MediaServerType,
+		PlexTVLib:       gc().Plex.TVLibraryID,
+		TVDir:           stubsTVDir,
+		StateDir:        GetStateDir(),
+		LogsDir:         gc().LogDir,
+		ProwlarrCfg:     gc().Prowlarr,
+		Language:        gc().Language,
+		Weights:         gc().QualityScoringConfig.TVWeights(),
+		InvalidatePath:  invalidateSyncRemovedPath,
+	}, nil)
+	
+	movieStubAPI := engines.NewMovieStubAPI(movieStubEngine)
+	tvStubAPI := engines.NewTVStubAPI(tvStubEngine)
+	
+	stubsHandler := syncer.NewStubsHandler(movieStubAPI, tvStubAPI, stubsMoviesDir, stubsTVDir)
+	stubsHandler.RegisterRoutes(http.DefaultServeMux)
+	
+	// Serve stub management HTML page
+	stubsHTML, loadErr := dashboard.StubManagementContent()
+	if loadErr != nil {
+		logger.Printf("[StubManagement] WARNING: failed to load stub management HTML: %v", loadErr)
+	} else {
+		http.HandleFunc("/stubs", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Write(stubsHTML)
+		})
+		logger.Printf("[StubManagement] enabled at :%d/stubs", gc().MetricsPort)
 	}
 
 	// Health Monitor + Dashboard (Fase 5)

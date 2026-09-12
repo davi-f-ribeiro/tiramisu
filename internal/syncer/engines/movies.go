@@ -83,3 +83,8 @@ func (s *MoviesSyncer) Run(ctx context.Context) error {
 	}
 	return nil
 }
+
+// MovieGoEngine returns the underlying engine for stub management.
+func (s *MoviesSyncer) MovieGoEngine() *MovieGoEngine {
+	return s.engine
+}

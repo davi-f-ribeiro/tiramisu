@@ -85,3 +85,8 @@ func (s *TVSyncer) Run(ctx context.Context) error {
 	}
 	return nil
 }
+
+// TVGoEngine returns the underlying engine for stub management.
+func (s *TVSyncer) TVGoEngine() *TVGoEngine {
+	return s.engine
+}

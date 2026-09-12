@@ -1,0 +1,195 @@
+
+<!-- Movies Section -->
+<div class="glass rounded-xl p-4 mb-6" id="moviesSection">
+  <div class="flex items-center justify-between mb-3">
+    <span class="text-xs text-slate-400 uppercase tracking-wider">Movies</span>
+    <button onclick="refreshStubs()" class="bg-slate-700 hover:bg-blue-600 text-white text-xs py-1 px-3 rounded transition whitespace-nowrap">Refresh</button>
+  </div>
+  <div id="moviesList" class="space-y-2 max-h-96 overflow-y-auto">
+    <div class="text-slate-500 text-sm">Loading...</div>
+  </div>
+</div>
+
+<!-- TV Section -->
+<div class="glass rounded-xl p-4 mb-6" id="tvSection">
+  <div class="flex items-center justify-between mb-3">
+    <span class="text-xs text-slate-400 uppercase tracking-wider">TV Shows</span>
+    <button onclick="refreshStubs()" class="bg-slate-700 hover:bg-blue-600 text-white text-xs py-1 px-3 rounded transition whitespace-nowrap">Refresh</button>
+  </div>
+  <div id="tvList" class="space-y-2 max-h-96 overflow-y-auto">
+    <div class="text-slate-500 text-sm">Loading...</div>
+  </div>
+</div>
+
+<!-- Add New Stub -->
+<div class="glass rounded-xl p-4 mb-6">
+  <div class="flex items-center justify-between mb-3">
+    <span class="text-xs text-slate-400 uppercase tracking-wider">Add New Stub</span>
+  </div>
+  <form id="addStubForm" class="space-y-3">
+    <div class="grid md:grid-cols-3 gap-3">
+      <input type="text" id="addMediaType" placeholder="Type (movie/tv)" class="bg-slate-800/50 text-slate-300 text-xs rounded px-3 py-2 border border-slate-600" required>
+      <input type="text" id="addItemId" placeholder="ID (TMDB ID or movie name)" class="bg-slate-800/50 text-slate-300 text-xs rounded px-3 py-2 border border-slate-600" required>
+      <select id="addType" class="bg-slate-800/50 text-slate-300 text-xs rounded px-3 py-2 border border-slate-600">
+        <option value="url">URL</option>
+        <option value="magnet">Magnet</option>
+      </select>
+    </div>
+    <input type="text" id="addValue" placeholder="URL or Magnet link" class="bg-slate-800/50 text-slate-300 text-xs rounded px-3 py-2 border border-slate-600 w-full" required>
+    <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 px-4 rounded transition">Add Stub</button>
+  </form>
+</div>
+
+
+<script>
+const API_BASE = '';
+let allMovies = [];
+let allTV = [];
+
+function fmtSize(b){
+  if(!b||b<1024)return'0 B';const u=['B','KB','MB','GB','TB'];let i=0,v=b;
+  while(v>=1024&&i<u.length-1){v/=1024;i++}return v.toFixed(1)+' '+u[i];
+}
+function trunc(t,n){return t&&t.length>n?t.slice(0,n)+'...':t||'--'}
+function setStatus(el,ok,msg){
+  const dot=el.querySelector('.status-dot'),lbl=el.querySelector('.status-label');
+  if(!dot||!lbl)return;
+  dot.style.color=ok?'#22c55e':'#ef4444';
+  dot.className='status-dot '+(ok?'pulse-ok':'pulse-err');
+  lbl.textContent=msg||'';
+}
+
+async function refreshStubs(){
+  try{
+    const [mR,tR]=await Promise.all([
+      fetch(API_BASE+'/api/stubs/movies'),
+      fetch(API_BASE+'/api/stubs/tv')
+    ]);
+    allMovies=mR.ok?await mR.json():[];
+    allTV=tR.ok?await tR.json():[];
+    renderList('movies',allMovies);
+    renderList('tv',allTV);
+  }catch(e){console.error('Failed to load stubs:',e);}
+}
+
+function renderList(type,stubs){
+  const el=document.getElementById(type+'List');
+  if(!stubs||!stubs.length){el.innerHTML='<div class="text-slate-500 text-sm">No '+(type==='movies'?'movie':'tv')+' stubs found</div>';return;}
+  
+  const filter=document.getElementById('filterType').value;
+  const search=document.getElementById('searchBox').value.toLowerCase();
+  
+  const filtered=stubs.filter(s=>{
+    if(filter!=='all'&&s.type!==filter)return false;
+    if(search&&!s.name.toLowerCase().includes(search))return false;
+    return true;
+  });
+  
+  el.innerHTML=filtered.map(s=>{
+    const statusOk=s.status==='ready'||s.status==='active';
+    const badges=[];
+    if(s.is_4k)badges.push('<span class="bg-purple-600/30 text-purple-300 px-1.5 py-0.5 rounded text-[10px]">4K</span>');
+    else if(s.is_1080p)badges.push('<span class="bg-blue-600/30 text-blue-300 px-1.5 py-0.5 rounded text-[10px]">1080p</span>');
+    if(s.audio)badges.push('<span class="bg-cyan-600/30 text-cyan-300 px-1.5 py-0.5 rounded text-[10px]">'+s.audio+'</span>');
+    const badgeHtml=badges.length?'<div class="flex gap-1 mt-1 text-xs">'+badges.join('')+'</div>':'';
+    
+    return`<div class="relative flex items-center gap-3 py-2 px-3 bg-slate-800/50 rounded-lg">
+      <span class="status-dot text-xl ${statusOk?'pulse-ok':''}" style="color:${statusOk?'#22c55e':'#ef4444'}">&#9679;</span>
+      <div class="flex-1 min-w-0">
+        <div class="text-sm font-semibold truncate">${s.name}</div>
+        <div class="text-xs text-slate-500">${s.id}</div>
+        ${s.source?`<div class="text-xs text-slate-400 truncate">${trunc(s.source,80)}</div>`:''}
+        ${badgeHtml}
+      </div>
+      <div class="text-right flex-shrink-0">
+        <div class="text-xs status-label">${s.status||'unknown'}</div>
+        <div class="flex gap-1 mt-1">
+          <button onclick="changeSource('${s.id}','${s.type}')" class="bg-slate-600 hover:bg-blue-600 text-white text-[10px] py-1 px-2 rounded transition">Change</button>
+          <button onclick="rehydrateStub('${s.id}','${s.type}')" class="bg-slate-600 hover:bg-orange-600 text-white text-[10px] py-1 px-2 rounded transition">Rehydrate</button>
+          <button onclick="removeStub('${s.id}','${s.type}')" class="bg-slate-600 hover:bg-red-600 text-white text-[10px] py-1 px-2 rounded transition">Remove</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function changeSource(id,type){
+  const src=prompt('Enter URL or Magnet link, or candidate ID:');
+  if(!src)return;
+  try{
+    const r=await fetch(API_BASE+'/api/stubs/'+id+'/source',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({source:src,type:type})
+    });
+    if(r.ok){alert('Source changed');refreshStubs();}
+    else alert('Failed: '+(await r.text()));
+  }catch(e){alert('Error: '+e.message);}
+}
+
+async function rehydrateStub(id,type){
+  if(!confirm('Force rehydrate this stub?'))return;
+  try{
+    const r=await fetch(API_BASE+'/api/stubs/'+id+'/rehydrate',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:type})
+    });
+    if(r.ok){alert('Rehydration triggered');refreshStubs();}
+    else alert('Failed: '+(await r.text()));
+  }catch(e){alert('Error: '+e.message);}
+}
+
+async function removeStub(id,type){
+  if(!confirm('Remove this stub and its torrent?'))return;
+  try{
+    const r=await fetch(API_BASE+'/api/stubs/'+id,{
+      method:'DELETE',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:type})
+    });
+    if(r.ok){alert('Stub removed');refreshStubs();}
+    else alert('Failed: '+(await r.text()));
+  }catch(e){alert('Error: '+e.message);}
+}
+
+document.getElementById('addStubForm').addEventListener('submit',async(e)=>{
+  e.preventDefault();
+  const mediaType=document.getElementById('addMediaType').value;
+  const itemId=document.getElementById('addItemId').value;
+  const inputType=document.getElementById('addType').value;
+  const value=document.getElementById('addValue').value;
+  
+  if(!mediaType||!itemId||!value){alert('All fields required');return;}
+  
+  try{
+    const r=await fetch(API_BASE+'/api/stubs',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        type:mediaType,
+        id:itemId,
+        sourceType:inputType,
+        source:value
+      })
+    });
+    if(r.ok){alert('Stub added');refreshStubs();e.target.reset();}
+    else alert('Failed: '+(await r.text()));
+  }catch(err){alert('Error: '+err.message);}
+});
+
+// Filter and search
+document.getElementById('filterType').addEventListener('change',()=>{
+  renderList('movies',allMovies);
+  renderList('tv',allTV);
+});
+document.getElementById('searchBox').addEventListener('input',()=>{
+  renderList('movies',allMovies);
+  renderList('tv',allTV);
+});
+
+// Initial load
+refreshStubs();
+</script>
+</body>
+</html>
