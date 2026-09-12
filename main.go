@@ -1031,6 +1031,8 @@ func (n *VirtualMkvNode) Open(ctx context.Context, flags uint32) (fs.FileHandle,
 		imdbID := n.vMeta.ImdbID
 		torrentName := filepath.Base(videoPath)
 
+		logger.Printf("[SUB] OPEN hook: videoPath=%q imdbID=%q vMeta.Path=%q", videoPath, imdbID, n.vMeta.Path)
+
 		safeGo(func() {
 			// Give the native pump a head start so the warmup cache has data
 			// before we try to read the first+last 64KB for SubDB hashing.
@@ -3779,39 +3781,42 @@ func handlePlexWebhook(w http.ResponseWriter, r *http.Request) {
 
 			// --- Rota C: Subtitle Provider Engine Hook (D4: manual resync supported) ---
 			cfg := gc()
-			if cfg.Subtitle.Enabled && globalSubtitleEngine != nil {
-				go func() {
-					videoPath := exactMatch
-					videoHash := exactState.Hash
-					imdbID := exactState.ImdbID
-					if imdbID == "" {
-						imdbID = webhookImdbID // fallback
-					}
-					torrentName := filepath.Base(videoPath)
+			logger.Printf("[SUB] WEBHOOK hook: enabled=%v engineNotNil=%v exactMatch=%q exactStateNotNil=%v",
+				cfg.Subtitle.Enabled, globalSubtitleEngine != nil, exactMatch, exactState != nil)
+			if cfg.Subtitle.Enabled && globalSubtitleEngine != nil && exactMatch != "" && exactState != nil {
+				videoPath := exactMatch
+				videoHash := exactState.Hash
+				imdbID := exactState.ImdbID
+				if imdbID == "" {
+					imdbID = webhookImdbID // fallback
+				}
+				torrentName := filepath.Base(videoPath)
 
-					// Run subtitle download — use returned channel (fixes orphaned channel bug)
-					resultCh := globalSubtitleEngine.Run(subprovider.SubtitleJob{
-						VideoPath:     videoPath,
-						TorrentName:   torrentName,
-						VideoHash:     videoHash,
-						ImdbID:        imdbID,
-						PreferredLang: resolvePreferredLang(cfg),
-					})
+				logger.Printf("[SUB] WEBHOOK calling Run: videoPath=%q videoHash=%q imdbID=%q",
+					videoPath, videoHash, imdbID)
 
-					// Read result (non-blocking with timeout)
-					select {
-					case res := <-resultCh:
-						if res.Error != nil {
-							logger.Printf("[SUB] Download failed: %v", res.Error)
-						} else if res.Content == nil && res.Filename != "" {
-							logger.Printf("[SUB] Using cached subtitle: %s", res.Filename)
-						} else if res.Content != nil {
-							logger.Printf("[SUB] Downloaded via %s, wrote to: %s", res.Provider, res.Filename)
-						}
-					case <-time.After(35 * time.Second):
-						logger.Printf("[SUB] Download timed out")
+				// Run subtitle download — use returned channel (fixes orphaned channel bug)
+				resultCh := globalSubtitleEngine.Run(subprovider.SubtitleJob{
+					VideoPath:     videoPath,
+					TorrentName:   torrentName,
+					VideoHash:     videoHash,
+					ImdbID:        imdbID,
+					PreferredLang: resolvePreferredLang(cfg),
+				})
+
+				// Read result (non-blocking with timeout)
+				select {
+				case res := <-resultCh:
+					if res.Error != nil {
+						logger.Printf("[SUB] Download failed: %v", res.Error)
+					} else if res.Content == nil && res.Filename != "" {
+						logger.Printf("[SUB] Using cached subtitle: %s", res.Filename)
+					} else if res.Content != nil {
+						logger.Printf("[SUB] Downloaded via %s, wrote to: %s", res.Provider, res.Filename)
 					}
-				}()
+				case <-time.After(35 * time.Second):
+					logger.Printf("[SUB] Download timed out")
+				}
 			}
 
 			if exactState.Hash != "" {
