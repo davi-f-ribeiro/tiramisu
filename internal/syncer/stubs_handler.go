@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -192,12 +193,15 @@ func (h *StubsHandler) putMovieSource(w http.ResponseWriter, r *http.Request, id
 	}
 
 	// Resolve existing stub path from ID
+	log.Printf("[StubAPI] putMovieSource: moviesDir=%q id=%q", h.moviesDir, id)
 	stubPath, found := findStubByPartialName(h.moviesDir, id)
 	if !found {
+		log.Printf("[StubAPI] putMovieSource: findStubByPartialName=%q returned found=false", id)
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("movie stub for %s not found", id)})
 		return
 	}
+	log.Printf("[StubAPI] putMovieSource: resolved stubPath=%q", stubPath)
 
 	// Extract IMDB ID from stub file content for candidate lookup.
 	// This ensures the candidate search uses the actual IMDB ID stored in
@@ -348,12 +352,15 @@ func (h *StubsHandler) postMovieManual(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *StubsHandler) deleteMovie(w http.ResponseWriter, r *http.Request, id string) {
+	log.Printf("[StubAPI] deleteMovie: moviesDir=%q id=%q", h.moviesDir, id)
 	stubPath, found := findStubByPartialName(h.moviesDir, id)
 	if !found {
+		log.Printf("[StubAPI] deleteMovie: findStubByPartialName=%q returned found=false", id)
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("movie stub for %s not found", id)})
 		return
 	}
+	log.Printf("[StubAPI] deleteMovie: resolved stubPath=%q", stubPath)
 
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
@@ -503,11 +510,13 @@ func (h *StubsHandler) deleteTV(w http.ResponseWriter, r *http.Request, id strin
 
 // findStubByPartialName searches a directory for a .mkv file whose name contains the given partial name.
 func findStubByPartialName(dir, partialName string) (string, bool) {
+	log.Printf("[StubAPI] findStubByPartialName: dir=%q partial=%q", dir, partialName)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
+		log.Printf("[StubAPI] findStubByPartialName: ReadDir err=%v", err)
 		return "", false
 	}
-	partial := strings.ToLower(partialName)
+	foundCount := 0
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -516,10 +525,14 @@ func findStubByPartialName(dir, partialName string) (string, bool) {
 		if !strings.HasSuffix(strings.ToLower(name), ".mkv") {
 			continue
 		}
-		if strings.Contains(name, partial) || strings.Contains(partial, name) {
+		foundCount++
+		log.Printf("[StubAPI] findStubByPartialName: candidate=%q", name)
+		if strings.Contains(name, partialName) || strings.Contains(partialName, name) {
+			log.Printf("[StubAPI] findStubByPartialName: MATCH candidate=%q", name)
 			return filepath.Join(dir, name), true
 		}
 	}
+	log.Printf("[StubAPI] findStubByPartialName: scanned=%d .mkv entries, no match", foundCount)
 	return "", false
 }
 
