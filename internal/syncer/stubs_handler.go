@@ -199,8 +199,24 @@ func (h *StubsHandler) putMovieSource(w http.ResponseWriter, r *http.Request, id
 		return
 	}
 
+	// Extract IMDB ID from stub file content for candidate lookup.
+	// This ensures the candidate search uses the actual IMDB ID stored in
+	// the stub, not the raw filename or other identifier passed from frontend.
+	imdbID := id
+	if content, err := os.ReadFile(stubPath); err == nil {
+		text := strings.TrimSpace(string(content))
+		if !strings.HasPrefix(text, "{") {
+			lines := strings.SplitN(text, "\n", 4)
+			if len(lines) >= 4 {
+				if extracted := strings.TrimSpace(lines[3]); extracted != "" {
+					imdbID = extracted
+				}
+			}
+		}
+	}
+
 	// Get candidates to find matching hash
-	candidates, _, err := h.movieAPI.ListCandidates(ctx, id, id, 0)
+	candidates, _, err := h.movieAPI.ListCandidates(ctx, imdbID, imdbID, 0)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("failed to list candidates: %v", err)})

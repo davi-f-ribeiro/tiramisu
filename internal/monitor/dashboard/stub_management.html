@@ -141,9 +141,9 @@ function renderList(type,stubs){
       <div class="text-right flex-shrink-0">
         <div class="text-xs status-label">${s.status||'unknown'}</div>
         <div class="flex gap-1 mt-1">
-          <button onclick="changeSource('${s.filename}','${s.type}')" class="bg-slate-600 hover:bg-blue-600 text-white text-[10px] py-1 px-2 rounded transition">Change</button>
-          <button onclick="rehydrateStub('${s.filename}','${s.type}')" class="bg-slate-600 hover:bg-orange-600 text-white text-[10px] py-1 px-2 rounded transition">Rehydrate</button>
-          <button onclick="removeStub('${s.filename}','${s.type}')" class="bg-slate-600 hover:bg-red-600 text-white text-[10px] py-1 px-2 rounded transition">Remove</button>
+          <button onclick="changeSource('${s.imdb_id || s.filename}','${s.type}')" class="bg-slate-600 hover:bg-blue-600 text-white text-[10px] py-1 px-2 rounded transition">Change</button>
+          <button onclick="rehydrateStub('${s.imdb_id || s.filename}','${s.type}')" class="bg-slate-600 hover:bg-orange-600 text-white text-[10px] py-1 px-2 rounded transition">Rehydrate</button>
+          <button onclick="removeStub('${s.imdb_id || s.filename}','${s.type}')" class="bg-slate-600 hover:bg-red-600 text-white text-[10px] py-1 px-2 rounded transition">Remove</button>
         </div>
       </div>
     </div>`;
