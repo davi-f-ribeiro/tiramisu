@@ -1,3 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tiramisu Stub Management</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+body{background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);min-height:100vh}
+.glass{background:rgba(30,41,59,.8);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.1)}
+.pulse-ok{animation:pok 2s infinite}
+.pulse-err{animation:perr 1s infinite}
+@keyframes pok{0%,100%{opacity:1}50%{opacity:.7}}
+@keyframes perr{0%,100%{opacity:1}50%{opacity:.5}}
+</style>
+</head>
+<body class="text-slate-100 p-4 md:p-8">
+<div class="max-w-7xl mx-auto">
+
+<h1 class="text-2xl font-bold mb-6">Stub Management</h1>
+
+<!-- Filter & Search -->
+<div class="glass rounded-xl p-4 mb-6">
+  <div class="flex flex-col sm:flex-row gap-3 items-center">
+    <div class="flex items-center gap-2">
+      <span class="text-xs text-slate-400 uppercase tracking-wider">Filter</span>
+      <select id="filterType" class="bg-slate-800/50 text-slate-300 text-xs rounded px-3 py-2 border border-slate-600">
+        <option value="all">All</option>
+        <option value="movie">Movies</option>
+        <option value="tv">TV Shows</option>
+      </select>
+    </div>
+    <div class="flex-1 flex items-center gap-2">
+      <span class="text-xs text-slate-400 uppercase tracking-wider">Search</span>
+      <input type="text" id="searchBox" placeholder="Filter by name..." class="bg-slate-800/50 text-slate-300 text-xs rounded px-3 py-2 border border-slate-600 flex-1">
+    </div>
+  </div>
+</div>
 
 <!-- Movies Section -->
 <div class="glass rounded-xl p-4 mb-6" id="moviesSection">
@@ -39,7 +77,6 @@
     <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 px-4 rounded transition">Add Stub</button>
   </form>
 </div>
-
 
 <script>
 const API_BASE = '';
@@ -191,5 +228,7 @@ document.getElementById('searchBox').addEventListener('input',()=>{
 // Initial load
 refreshStubs();
 </script>
+
+</div>
 </body>
 </html>
