@@ -174,7 +174,7 @@ func NewTVGoEngine(cfg TVEngineConfig, db *metadb.DB) *TVGoEngine {
 		plexTVLib:        cfg.PlexTVLib,
 		mediasrv:         mediaserver.New(cfg.MediaServerType, cfg.PlexURL, cfg.PlexToken),
 		tvDir:            cfg.TVDir,
-		sourcePath:       filepath.Dir(filepath.Clean(filepath.Join(cfg.TVDir, ".."))),
+		sourcePath:       filepath.Clean(filepath.Join(cfg.TVDir, "..")),
 		fuseMountPath:    cfg.FuseMountPath,
 		stateDir:         cfg.StateDir,
 		limiter:          rate.NewLimiter(rate.Every(500*time.Millisecond), 1),
@@ -194,6 +194,9 @@ func NewTVGoEngine(cfg TVEngineConfig, db *metadb.DB) *TVGoEngine {
 
 	e.registry = e.loadRegistry()
 	e.blacklist = e.loadBlacklist()
+
+	e.logger.Printf("[TVSync] Initialized: sourcePath=%q tvDir=%q fuseMountPath=%q",
+		e.sourcePath, e.tvDir, e.fuseMountPath)
 
 	return e
 }

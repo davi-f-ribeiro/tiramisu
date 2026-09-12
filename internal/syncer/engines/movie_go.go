@@ -165,7 +165,7 @@ func NewMovieGoEngine(cfg MovieEngineConfig) *MovieGoEngine {
 		plexLib:   cfg.PlexLib,
 		mediasrv:  mediaserver.New(cfg.MediaServerType, cfg.PlexURL, cfg.PlexToken),
 		moviesDir: cfg.MoviesDir,
-		sourcePath: filepath.Dir(filepath.Clean(filepath.Join(cfg.MoviesDir, ".."))),
+		sourcePath:    filepath.Clean(filepath.Join(cfg.MoviesDir, "..")),
 		fuseMountPath: cfg.FuseMountPath,
 		stateDir:  cfg.StateDir,
 		limiter:   rate.NewLimiter(rate.Every(250*time.Millisecond), 1),
@@ -192,6 +192,9 @@ func NewMovieGoEngine(cfg MovieEngineConfig) *MovieGoEngine {
 	e.addFailCache = e.loadCache(e.addFailCFile)
 	e.imdbCache = e.loadIMDBCache(e.imdbCFile)
 	e.blacklist = e.loadBlacklist()
+
+	e.logger.Printf("[MovieSync] Initialized: sourcePath=%q moviesDir=%q fuseMountPath=%q",
+		e.sourcePath, e.moviesDir, e.fuseMountPath)
 
 	e.pruneExpiredCaches()
 
